@@ -1,0 +1,7 @@
+ccxt>=4.3.0
+pandas>=2.3.2
+pandas-ta>=0.4.71b0
+python-dotenv>=1.0.0
+schedule>=1.2.0
+loguru>=0.7.0
+requests>=2.32.0
