@@ -35,14 +35,17 @@ def fetch_ticker() -> dict:
 
 
 def fetch_balance() -> dict:
-    """Return free XRP balance and its USD value."""
+    """Return free USD cash balance, free XRP balance, and current price."""
     try:
         balance = _exchange.fetch_balance()
         xrp_free = balance.get("XRP", {}).get("free", 0.0)
+        # Kraken reports USD as "USD" or "ZUSD" depending on the account
+        usd_free = balance.get("USD", {}).get("free", 0.0)
+        if usd_free == 0.0:
+            usd_free = balance.get("ZUSD", {}).get("free", 0.0)
         ticker = fetch_ticker()
         price = ticker.get("last", 0.0)
-        usd_value = xrp_free * price
-        return {"xrp": xrp_free, "usd": usd_value, "price": price}
+        return {"xrp": xrp_free, "usd": usd_free, "price": price}
     except Exception as e:
         logger.error(f"fetch_balance failed: {e}")
         return {"xrp": 0.0, "usd": 0.0, "price": 0.0}
