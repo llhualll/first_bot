@@ -27,7 +27,7 @@ BREAKEVEN_BUFFER = 0.0003  # cover fees when moving SL to breakeven after TP1
 
 # ── Risk controls ──────────────────────────────────────────
 MAX_DAILY_LOSS   = 0.02    # stop trading if daily loss >= 2%
-MAX_DAILY_GAIN   = 0.01    # stop trading if daily gain >= 1%
+MAX_DAILY_GAIN   = 0.03    # stop trading if daily gain >= 3% (was 1%, too conservative)
 MAX_CONSEC_LOSS  = 2       # pause 24h after this many consecutive losses
 MAX_DRAWDOWN_PCT = 0.15    # stop bot if balance drops >15% from peak
 FLASH_CRASH_PCT  = 0.05    # halt if XRP drops >5% in 1 hour
@@ -40,15 +40,15 @@ CHECK_INTERVAL   = 60      # main loop interval in seconds (60 = 1 minute pollin
 
 # ── Technical analysis ─────────────────────────────────────
 RSI_PERIOD       = 14
-RSI_OVERSOLD     = 40      # enter only when RSI < 40
+RSI_OVERSOLD     = 50      # enter only when RSI < 50 (uptrend pullback; 40 was too strict)
 EMA_FAST         = 20
 EMA_SLOW         = 50
 SUPPORT_LOOKBACK = 20      # candles to look back for support level
-SUPPORT_TOLERANCE= 0.005   # price must be within 0.5% of support
+SUPPORT_TOLERANCE= 0.012   # price must be within 1.2% of support (0.5% was too tight)
 
 # ── Scheduling ─────────────────────────────────────────────
 DAY_RESET_UTC_HOUR = 0     # reset daily P&L at UTC 00:00
-STRATEGY_INTERVAL_MIN = 60 # run full strategy check every 60 minutes
+STRATEGY_INTERVAL_MIN = 15 # run full strategy check every 15 minutes (was 60)
 
 # ── Telegram ───────────────────────────────────────────────
 TELEGRAM_TOKEN      = os.getenv("TELEGRAM_TOKEN", "")
