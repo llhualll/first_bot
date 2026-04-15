@@ -9,8 +9,9 @@ KRAKEN_API_KEY   = os.getenv("KRAKEN_API_KEY", "")
 KRAKEN_SECRET    = os.getenv("KRAKEN_SECRET", "")
 
 # ── Mode ───────────────────────────────────────────────────
-PAPER_TRADE      = os.getenv("PAPER_TRADE", "true").lower() == "true"
-PAUSE            = os.getenv("PAUSE", "false").lower() == "true"
+PAPER_TRADE         = os.getenv("PAPER_TRADE", "true").lower() == "true"
+PAUSE               = os.getenv("PAUSE", "false").lower() == "true"
+PAPER_BALANCE_START = 1500.0  # virtual USD balance for paper trading
 
 # ── Position sizing ────────────────────────────────────────
 TRADE_RATIO      = 0.80   # use 80% of available balance per trade

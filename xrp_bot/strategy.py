@@ -152,6 +152,9 @@ def monitor_position(risk_manager) -> str | None:
             log_trade("sell", _pos.entry_price, tp1_price, half_xrp, fee, net, "TP1", PAPER_TRADE)
             notifier.notify_tp1(tp1_price, net, _pos.xrp_remaining, breakeven)
             risk_manager.record_trade(net)
+            if PAPER_TRADE:
+                from paper_wallet import update as pw_update
+                pw_update(net)
             logger.info(f"TP1 hit @ ${tp1_price:.4f} | profit=${net:.4f}")
             return "TP1"
 
@@ -167,6 +170,9 @@ def monitor_position(risk_manager) -> str | None:
         log_trade("sell", _pos.entry_price, tp2_price, _pos.xrp_remaining, fee, net, "TP2", PAPER_TRADE)
         notifier.notify_tp2(tp2_price, total)
         risk_manager.record_trade(net)
+        if PAPER_TRADE:
+            from paper_wallet import update as pw_update
+            pw_update(net)
         logger.info(f"TP2 hit @ ${tp2_price:.4f} | total profit=${total:.4f}")
         _pos = Position()
         return "TP2"
@@ -180,6 +186,9 @@ def monitor_position(risk_manager) -> str | None:
         log_trade("sell", _pos.entry_price, sl_price, _pos.xrp_remaining, fee, net, "SL", PAPER_TRADE)
         notifier.notify_stop_loss(sl_price, net)
         risk_manager.record_trade(net)
+        if PAPER_TRADE:
+            from paper_wallet import update as pw_update
+            pw_update(net)
         logger.info(f"SL hit @ ${sl_price:.4f} | loss=${net:.4f}")
         _pos = Position()
         return "SL"
