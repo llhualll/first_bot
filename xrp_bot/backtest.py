@@ -20,6 +20,8 @@ from dataclasses import dataclass
 INITIAL_BALANCE      = 1500.0
 MAKER_FEE            = 0.0016
 BREAKEVEN_BUFFER     = 0.0003
+MAX_CONSEC_LOSS      = 2
+CONSEC_LOSS_PAUSE_H  = 24
 
 UP_RSI_ENTRY         = 65
 UP_SUPPORT_TOLERANCE = 0.05
@@ -160,11 +162,15 @@ def run_backtest(df, test_days: int) -> list:
     trades       = []
     skip_until   = None
     dn_cooldown  = False   # downtrend only; uptrend cooldown removed after testing
+    consec_losses = 0
+    pause_until  = None    # consecutive loss pause (24h after 2 SL)
 
     for ts, row in test_df.iterrows():
         if pd.isna(row["ema_fast"]) or pd.isna(row["ema_slow"]) or pd.isna(row["rsi"]):
             continue
         if skip_until is not None and ts <= skip_until:
+            continue
+        if pause_until is not None and ts <= pause_until:
             continue
 
         price   = row["close"]
@@ -217,6 +223,16 @@ def run_backtest(df, test_days: int) -> list:
 
         balance += t.net_pnl
         trades.append(t)
+
+        # Track consecutive losses for 24h pause
+        if t.net_pnl < 0:
+            consec_losses += 1
+        else:
+            consec_losses = 0
+        if consec_losses >= MAX_CONSEC_LOSS:
+            pause_until = t.exit_ts + pd.Timedelta(hours=CONSEC_LOSS_PAUSE_H) if t.exit_ts else None
+            consec_losses = 0
+
         if t.exit_reason == "SL" and t.mode == "DOWNTREND":
             dn_cooldown = True
         if t.exit_ts:

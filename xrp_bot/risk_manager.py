@@ -2,7 +2,7 @@ import time
 from datetime import datetime, timezone
 from loguru import logger
 from config import (
-    MAX_DAILY_LOSS, MAX_DAILY_GAIN, MAX_CONSEC_LOSS,
+    MAX_DAILY_LOSS, MAX_DAILY_GAIN, MAX_CONSEC_LOSS, CONSEC_LOSS_PAUSE_H,
     MAX_DRAWDOWN_PCT, FLASH_CRASH_PCT, FLASH_CRASH_PAUSE_H,
 )
 from kraken_client import cancel_all_orders
@@ -40,10 +40,10 @@ class RiskManager:
             self.consec_losses = 0
 
         if self.consec_losses >= MAX_CONSEC_LOSS:
-            pause_secs = FLASH_CRASH_PAUSE_H * 3600  # reuse same 4h window
+            pause_secs = CONSEC_LOSS_PAUSE_H * 3600
             self.pause_until = time.time() + pause_secs
-            logger.warning(f"Consecutive loss limit hit. Pausing {pause_secs/3600:.0f}h.")
-            notifier.notify_consecutive_loss_pause(int(pause_secs / 3600))
+            logger.warning(f"Consecutive loss limit hit. Pausing {CONSEC_LOSS_PAUSE_H}h.")
+            notifier.notify_consecutive_loss_pause(CONSEC_LOSS_PAUSE_H)
             self.consec_losses = 0
 
     def update_peak(self, balance_usd: float) -> None:

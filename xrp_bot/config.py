@@ -45,7 +45,8 @@ DN_TRADE_RATIO       = 0.40    # half size — downtrend is risky
 # ── Risk controls ──────────────────────────────────────────
 MAX_DAILY_LOSS   = 0.02    # stop trading if daily loss >= 2%
 MAX_DAILY_GAIN   = 0.03    # stop trading if daily gain >= 3% (was 1%, too conservative)
-MAX_CONSEC_LOSS  = 2       # pause 24h after this many consecutive losses
+MAX_CONSEC_LOSS      = 2   # pause after this many consecutive losses
+CONSEC_LOSS_PAUSE_H  = 24  # hours to pause after consecutive loss limit (increased from 4h)
 MAX_DRAWDOWN_PCT = 0.15    # stop bot if balance drops >15% from peak
 FLASH_CRASH_PCT  = 0.05    # halt if XRP drops >5% in 1 hour
 FLASH_CRASH_PAUSE_H = 4    # hours to pause after flash crash
