@@ -36,7 +36,7 @@ UP_SL_PCT            = 0.010   # -1.0%
 UP_TRADE_RATIO       = 0.80    # full size
 
 # Downtrend strategy (EMA20 < EMA50): buy deep oversold bounces only
-DN_RSI_ENTRY         = 35      # only enter on very oversold readings
+DN_RSI_ENTRY         = 32      # tightened from 35 — reduces false signals in sustained downtrends
 DN_TP1_PCT           = 0.008   # +0.8% (quick exit, hostile environment)
 DN_TP2_PCT           = 0.013   # +1.3%
 DN_SL_PCT            = 0.006   # -0.6% (tight stop)

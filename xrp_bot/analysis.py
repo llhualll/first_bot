@@ -73,15 +73,30 @@ def is_flash_crash(data: dict, threshold: float) -> bool:
     return data.get("change_1h", 0) <= -threshold
 
 
+# ── Downtrend cooldown state ──────────────────────────────────────────────────
+# Set to True by strategy.py after a downtrend SL hit.
+# Skips the very next downtrend signal to avoid chasing a falling knife.
+_dn_cooldown: bool = False
+
+
+def set_downtrend_cooldown(value: bool) -> None:
+    global _dn_cooldown
+    _dn_cooldown = value
+    if value:
+        logger.info("[DOWNTREND] Cooldown active — skipping next downtrend signal after SL.")
+
+
 def has_entry_signal(data: dict) -> dict | None:
     """
     Auto-detects trend and applies the matching strategy.
 
     Uptrend   (EMA20 > EMA50): RSI < 65 AND price within 5% of EMA50
-    Downtrend (EMA20 < EMA50): RSI < 35 (deep oversold bounce, no support check)
+    Downtrend (EMA20 < EMA50): RSI < 32, skip one signal after SL (cooldown)
 
     Returns a strategy dict on signal, or None if no signal.
     """
+    global _dn_cooldown
+
     if not data:
         return None
 
@@ -104,6 +119,13 @@ def has_entry_signal(data: dict) -> dict | None:
                 "sl_pct": UP_SL_PCT, "trade_ratio": UP_TRADE_RATIO,
             }
     else:
+        if _dn_cooldown:
+            logger.info(
+                f"[DOWNTREND] Cooldown skip | RSI={rsi:.1f} price={price:.4f}"
+            )
+            _dn_cooldown = False   # consume the cooldown
+            return None
+
         signal = rsi < DN_RSI_ENTRY
         logger.info(
             f"[DOWNTREND] Signal check | price={price:.4f} "
