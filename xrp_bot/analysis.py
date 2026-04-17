@@ -3,9 +3,9 @@ import pandas_ta as ta
 from loguru import logger
 from kraken_client import fetch_ohlcv, fetch_ticker
 from config import (
-    RSI_PERIOD, RSI_OVERSOLD,
-    EMA_FAST, EMA_SLOW,
-    SUPPORT_LOOKBACK, SUPPORT_TOLERANCE,
+    RSI_PERIOD, EMA_FAST, EMA_SLOW, SUPPORT_LOOKBACK,
+    UP_RSI_ENTRY, UP_SUPPORT_TOLERANCE, UP_TP1_PCT, UP_TP2_PCT, UP_SL_PCT, UP_TRADE_RATIO,
+    DN_RSI_ENTRY, DN_TP1_PCT, DN_TP2_PCT, DN_SL_PCT, DN_TRADE_RATIO,
 )
 
 
@@ -73,27 +73,47 @@ def is_flash_crash(data: dict, threshold: float) -> bool:
     return data.get("change_1h", 0) <= -threshold
 
 
-def has_entry_signal(data: dict) -> bool:
+def has_entry_signal(data: dict) -> dict | None:
     """
-    Entry conditions (all must be true):
-    1. RSI(1H) < RSI_OVERSOLD (40)
-    2. Price within SUPPORT_TOLERANCE (0.5%) of support level
-    3. EMA_FAST(4H) > EMA_SLOW(4H) — uptrend
+    Auto-detects trend and applies the matching strategy.
+
+    Uptrend   (EMA20 > EMA50): RSI < 65 AND price within 5% of EMA50
+    Downtrend (EMA20 < EMA50): RSI < 35 (deep oversold bounce, no support check)
+
+    Returns a strategy dict on signal, or None if no signal.
     """
     if not data:
-        return False
+        return None
 
     price   = data["price"]
     support = data["support"]
     rsi     = data["rsi"]
+    uptrend = is_uptrend(data)
 
-    near_support = abs(price - support) / support <= SUPPORT_TOLERANCE if support else False
-    oversold     = rsi < RSI_OVERSOLD
-    uptrend      = is_uptrend(data)
+    if uptrend:
+        near = abs(price - support) / support <= UP_SUPPORT_TOLERANCE if support else False
+        signal = near and rsi < UP_RSI_ENTRY
+        logger.info(
+            f"[UPTREND] Signal check | price={price:.4f} support={support:.4f} "
+            f"near={near} RSI={rsi:.1f} threshold={UP_RSI_ENTRY}"
+        )
+        if signal:
+            return {
+                "mode": "UPTREND",
+                "tp1_pct": UP_TP1_PCT, "tp2_pct": UP_TP2_PCT,
+                "sl_pct": UP_SL_PCT, "trade_ratio": UP_TRADE_RATIO,
+            }
+    else:
+        signal = rsi < DN_RSI_ENTRY
+        logger.info(
+            f"[DOWNTREND] Signal check | price={price:.4f} "
+            f"RSI={rsi:.1f} threshold={DN_RSI_ENTRY}"
+        )
+        if signal:
+            return {
+                "mode": "DOWNTREND",
+                "tp1_pct": DN_TP1_PCT, "tp2_pct": DN_TP2_PCT,
+                "sl_pct": DN_SL_PCT, "trade_ratio": DN_TRADE_RATIO,
+            }
 
-    logger.info(
-        f"Signal check | price={price:.4f} support={support:.4f} "
-        f"near={near_support} RSI={rsi:.1f} oversold={oversold} uptrend={uptrend}"
-    )
-
-    return near_support and oversold and uptrend
+    return None

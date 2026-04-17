@@ -141,10 +141,10 @@ class RiskManager:
         if self.check_daily_limits(balance_usd):
             return False
 
-        if not self.check_trend(
+        # Notify on trend transitions but don't block — strategy selection handles it
+        self.check_trend(
             market_data.get("ema_fast", 0),
             market_data.get("ema_slow", 0),
-        ):
-            return False
+        )
 
         return True

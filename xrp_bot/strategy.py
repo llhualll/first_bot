@@ -33,6 +33,12 @@ class Position:
 
     total_profit: float = 0.0     # accumulates TP1 + TP2 profit
 
+    # Strategy params stored at open time
+    strategy_mode: str = "UPTREND"
+    tp1_pct: float = TP1_PCT
+    tp2_pct: float = TP2_PCT
+    sl_pct: float = SL_PCT
+
 
 # Module-level position state
 _pos = Position()
@@ -46,22 +52,29 @@ def get_position() -> Position:
     return _pos
 
 
-def open_position(market_data: dict) -> bool:
+def open_position(market_data: dict, strategy: dict | None = None) -> bool:
     """Place limit buy and attach TP/SL orders. Returns True on success."""
     global _pos
+
+    # Pick parameters from strategy dict, fall back to config defaults
+    tp1_pct     = strategy["tp1_pct"]     if strategy else TP1_PCT
+    tp2_pct     = strategy["tp2_pct"]     if strategy else TP2_PCT
+    sl_pct      = strategy["sl_pct"]      if strategy else SL_PCT
+    trade_ratio = strategy["trade_ratio"] if strategy else TRADE_RATIO
+    mode        = strategy["mode"]        if strategy else "UPTREND"
 
     balance = fetch_balance()
     balance_usd = balance["usd"]
     price = market_data["price"]
 
-    trade_usd = round(balance_usd * TRADE_RATIO, 2)
+    trade_usd = round(balance_usd * trade_ratio, 2)
     if trade_usd < 10:
         logger.warning(f"Trade amount too small: ${trade_usd:.2f}")
         return False
 
-    tp1_price = round(price * (1 + TP1_PCT), 4)
-    tp2_price = round(price * (1 + TP2_PCT), 4)
-    sl_price  = round(price * (1 - SL_PCT), 4)
+    tp1_price  = round(price * (1 + tp1_pct), 4)
+    tp2_price  = round(price * (1 + tp2_pct), 4)
+    sl_price   = round(price * (1 - sl_pct), 4)
     xrp_amount = round(trade_usd / price, 2)
 
     buy_order = place_limit_buy(trade_usd, price)
@@ -83,10 +96,15 @@ def open_position(market_data: dict) -> bool:
         tp2_order_id=tp2_order["id"] if tp2_order else "",
         sl_order_id=sl_order["id"] if sl_order else "",
         is_open=True,
+        strategy_mode=mode,
+        tp1_pct=tp1_pct,
+        tp2_pct=tp2_pct,
+        sl_pct=sl_pct,
     )
 
-    notifier.notify_buy(price, xrp_amount, trade_usd, tp1_price, tp2_price, sl_price)
-    logger.info(f"Position opened: {xrp_amount} XRP @ ${price:.4f}")
+    notifier.notify_buy(price, xrp_amount, trade_usd, tp1_price, tp2_price, sl_price, mode)
+    logger.info(f"[{mode}] Position opened: {xrp_amount} XRP @ ${price:.4f} | "
+                f"TP1={tp1_pct*100:.1f}% TP2={tp2_pct*100:.1f}% SL=-{sl_pct*100:.1f}%")
     return True
 
 
@@ -135,7 +153,7 @@ def monitor_position(risk_manager) -> str | None:
     if not _pos.tp1_hit:
         tp1_status = get_order_status(_pos.tp1_order_id)
         if tp1_status == "closed" or (PAPER_TRADE and _should_simulate_tp(_pos, "TP1")):
-            tp1_price = _pos.entry_price * (1 + TP1_PCT)
+            tp1_price = _pos.entry_price * (1 + _pos.tp1_pct)
             half_xrp  = round(_pos.xrp_amount * 0.5, 2)
             net, fee  = _calc_net_profit(_pos.entry_price, tp1_price, half_xrp)
 
@@ -161,7 +179,7 @@ def monitor_position(risk_manager) -> str | None:
     # ── Check TP2 ─────────────────────────────────────────────────────────────
     tp2_status = get_order_status(_pos.tp2_order_id)
     if tp2_status == "closed" or (PAPER_TRADE and _should_simulate_tp(_pos, "TP2")):
-        tp2_price = _pos.entry_price * (1 + TP2_PCT)
+        tp2_price = _pos.entry_price * (1 + _pos.tp2_pct)
         net, fee  = _calc_net_profit(_pos.entry_price, tp2_price, _pos.xrp_remaining)
 
         _pos.total_profit += net
@@ -180,7 +198,7 @@ def monitor_position(risk_manager) -> str | None:
     # ── Check SL ──────────────────────────────────────────────────────────────
     sl_status = get_order_status(_pos.sl_order_id)
     if sl_status == "closed" or (PAPER_TRADE and _should_simulate_sl(_pos)):
-        sl_price = _pos.entry_price * (1 - SL_PCT)
+        sl_price = _pos.entry_price * (1 - _pos.sl_pct)
         net, fee = _calc_net_profit(_pos.entry_price, sl_price, _pos.xrp_remaining)
 
         log_trade("sell", _pos.entry_price, sl_price, _pos.xrp_remaining, fee, net, "SL", PAPER_TRADE)

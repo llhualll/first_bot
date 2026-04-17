@@ -14,17 +14,33 @@ PAUSE               = os.getenv("PAUSE", "false").lower() == "true"
 PAPER_BALANCE_START = 1500.0  # virtual USD balance for paper trading
 
 # ── Position sizing ────────────────────────────────────────
-TRADE_RATIO      = 0.80   # use 80% of available balance per trade
+TRADE_RATIO      = 0.80   # default, overridden per strategy
 RESERVE_RATIO    = 0.20   # keep 20% as safety buffer
 
 # ── Fees ───────────────────────────────────────────────────
 MAKER_FEE        = 0.0016  # 0.16% limit order (Maker)
 
-# ── Take profit / stop loss ────────────────────────────────
-TP1_PCT          = 0.0082  # +0.82% price move → +0.5% net profit (sell 50%)
-TP2_PCT          = 0.0132  # +1.32% price move → +1.0% net profit (sell 100%)
-SL_PCT           = 0.0080  # -0.80% price move → stop loss (full exit)
+# ── Take profit / stop loss (defaults, overridden per strategy) ────────────
+TP1_PCT          = 0.0082
+TP2_PCT          = 0.0132
+SL_PCT           = 0.0080
 BREAKEVEN_BUFFER = 0.0003  # cover fees when moving SL to breakeven after TP1
+
+# ── Dual Strategy ──────────────────────────────────────────
+# Uptrend strategy (EMA20 > EMA50): buy pullbacks in a rising trend
+UP_RSI_ENTRY         = 65      # enter when RSI pulls back below 65
+UP_SUPPORT_TOLERANCE = 0.05    # price within 5% of EMA50
+UP_TP1_PCT           = 0.015   # +1.5% (give more room, trend helps)
+UP_TP2_PCT           = 0.025   # +2.5%
+UP_SL_PCT            = 0.010   # -1.0%
+UP_TRADE_RATIO       = 0.80    # full size
+
+# Downtrend strategy (EMA20 < EMA50): buy deep oversold bounces only
+DN_RSI_ENTRY         = 35      # only enter on very oversold readings
+DN_TP1_PCT           = 0.008   # +0.8% (quick exit, hostile environment)
+DN_TP2_PCT           = 0.013   # +1.3%
+DN_SL_PCT            = 0.006   # -0.6% (tight stop)
+DN_TRADE_RATIO       = 0.40    # half size — downtrend is risky
 
 # ── Risk controls ──────────────────────────────────────────
 MAX_DAILY_LOSS   = 0.02    # stop trading if daily loss >= 2%
@@ -50,6 +66,7 @@ SUPPORT_TOLERANCE= 0.012   # price must be within 1.2% of support (0.5% was too 
 # ── Scheduling ─────────────────────────────────────────────
 DAY_RESET_UTC_HOUR = 0     # reset daily P&L at UTC 00:00
 STRATEGY_INTERVAL_MIN = 15 # run full strategy check every 15 minutes (was 60)
+
 
 # ── Telegram ───────────────────────────────────────────────
 TELEGRAM_TOKEN      = os.getenv("TELEGRAM_TOKEN", "")

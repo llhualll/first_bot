@@ -129,11 +129,12 @@ def main_loop() -> None:
                     time.sleep(CHECK_INTERVAL)
                     continue
 
-                # Check entry signal
+                # Check entry signal (returns strategy dict or None)
                 from analysis import has_entry_signal
-                if has_entry_signal(market_data):
-                    logger.info("Entry signal found! Opening position...")
-                    open_position(market_data)
+                signal = has_entry_signal(market_data)
+                if signal:
+                    logger.info(f"Entry signal found! Strategy: {signal['mode']}. Opening position...")
+                    open_position(market_data, signal)
                 else:
                     logger.info("No signal this cycle. Waiting...")
 

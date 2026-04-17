@@ -34,17 +34,23 @@ def notify_startup(balance_usd: float, balance_xrp: float, price: float) -> None
 
 
 def notify_buy(price: float, amount_xrp: float, amount_usd: float,
-               tp1: float, tp2: float, sl: float) -> None:
+               tp1: float, tp2: float, sl: float,
+               strategy_mode: str = "UPTREND") -> None:
+    tp1_pct = (tp1 / price - 1) * 100
+    tp2_pct = (tp2 / price - 1) * 100
+    sl_pct  = (1 - sl / price) * 100
+    icon = "📈" if strategy_mode == "UPTREND" else "📉"
     _send(
         f"🟢 <b>{_mode()}Buy Order Placed</b>\n"
         f"─────────────────\n"
+        f"Strategy: {icon} {strategy_mode}\n"
         f"Pair:     XRP/USD\n"
         f"Buy @:    ${price:.4f}\n"
         f"Amount:   {amount_xrp:.2f} XRP (${amount_usd:.2f})\n"
         f"─────────────────\n"
-        f"TP1:      ${tp1:.4f} (+0.82%)\n"
-        f"TP2:      ${tp2:.4f} (+1.32%)\n"
-        f"SL:       ${sl:.4f} (-0.80%)"
+        f"TP1:      ${tp1:.4f} (+{tp1_pct:.1f}%)\n"
+        f"TP2:      ${tp2:.4f} (+{tp2_pct:.1f}%)\n"
+        f"SL:       ${sl:.4f} (-{sl_pct:.1f}%)"
     )
 
 
@@ -89,9 +95,9 @@ def notify_order_cancelled(reason: str) -> None:
 
 def notify_bear_market(ema_fast: float, ema_slow: float) -> None:
     _send(
-        f"⚠️ <b>Bear Market Detected</b>\n"
+        f"⚠️ <b>Downtrend Detected</b>\n"
         f"EMA20={ema_fast:.4f} < EMA50={ema_slow:.4f}\n"
-        f"Holding cash. No new entries until trend recovers."
+        f"Switching to downtrend strategy: RSI &lt; 35 entries only, half size."
     )
 
 
