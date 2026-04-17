@@ -7,7 +7,7 @@ from config import (
     MAKER_FEE, TRADE_RATIO, ORDER_TIMEOUT_H, PAPER_TRADE,
 )
 from kraken_client import (
-    fetch_balance, place_limit_buy, place_limit_sell,
+    fetch_balance, fetch_ticker, place_limit_buy, place_limit_sell,
     cancel_order, get_order_status, get_order,
 )
 from trade_logger import log_trade
@@ -272,19 +272,41 @@ def recover_existing_position() -> bool:
 
 
 # ── Paper trade simulation helpers ───────────────────────────────────────────
+# Check REAL ticker price to decide whether TP/SL would have been filled.
+# This gives realistic paper-trade behavior that matches what live would do.
+
+def _current_price() -> float:
+    """Fetch real XRP ticker price. Returns 0.0 on failure."""
+    t = fetch_ticker()
+    return float(t.get("last", 0.0) or 0.0)
+
 
 def _should_simulate_tp(pos: Position, level: str) -> bool:
-    """Simulate TP trigger in paper trade after 30 minutes for testing."""
+    """TP fills when real XRP price crosses the TP level."""
     if not PAPER_TRADE:
         return False
-    elapsed_min = (time.time() - pos.buy_placed_at) / 60
-    if level == "TP1":
-        return elapsed_min >= 30 and not pos.tp1_hit
-    if level == "TP2":
-        return elapsed_min >= 60 and pos.tp1_hit
+    price = _current_price()
+    if price <= 0:
+        return False
+    if level == "TP1" and not pos.tp1_hit:
+        tp1_price = pos.entry_price * (1 + pos.tp1_pct)
+        return price >= tp1_price
+    if level == "TP2" and pos.tp1_hit:
+        tp2_price = pos.entry_price * (1 + pos.tp2_pct)
+        return price >= tp2_price
     return False
 
 
 def _should_simulate_sl(pos: Position) -> bool:
-    """In paper trade, never simulate SL unless explicitly set."""
-    return False
+    """SL fills when real XRP price crosses below the SL level.
+    After TP1, the effective SL is breakeven + buffer."""
+    if not PAPER_TRADE:
+        return False
+    price = _current_price()
+    if price <= 0:
+        return False
+    if pos.tp1_hit:
+        sl_price = pos.entry_price * (1 + BREAKEVEN_BUFFER)
+    else:
+        sl_price = pos.entry_price * (1 - pos.sl_pct)
+    return price <= sl_price

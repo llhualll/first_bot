@@ -105,6 +105,18 @@ def notify_trend_recovered() -> None:
     _send("✅ <b>Uptrend Recovered</b>\nEMA20 > EMA50 again. Resuming trading.")
 
 
+def notify_panic_pause(roc: float, ema_gap: float, hours: int) -> None:
+    _send(
+        f"🚨 <b>Panic Market Detected — Pausing {hours}h</b>\n"
+        f"─────────────────\n"
+        f"Price drop (40h): {roc*100:.1f}%\n"
+        f"EMA gap:          {ema_gap*100:.1f}%\n"
+        f"─────────────────\n"
+        f"All new entries suspended for {hours} hours.\n"
+        f"Existing position continues to be monitored."
+    )
+
+
 def notify_flash_crash(change_pct: float) -> None:
     _send(
         f"🚨 <b>Flash Crash Detected!</b>\n"

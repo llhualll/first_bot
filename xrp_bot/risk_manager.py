@@ -1,12 +1,18 @@
+import json
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from loguru import logger
 from config import (
     MAX_DAILY_LOSS, MAX_DAILY_GAIN, MAX_CONSEC_LOSS, CONSEC_LOSS_PAUSE_H,
     MAX_DRAWDOWN_PCT, FLASH_CRASH_PCT, FLASH_CRASH_PAUSE_H,
+    PANIC_ROC_THRESHOLD, PANIC_EMA_GAP_PCT, PANIC_PAUSE_H,
 )
 from kraken_client import cancel_all_orders
 import notifier
+
+# Persist daily state so the gain/loss cap survives service restarts.
+_STATE_FILE = Path(__file__).parent / "logs" / "daily_state.json"
 
 
 class RiskManager:
@@ -16,9 +22,43 @@ class RiskManager:
         self.consec_losses: int = 0           # consecutive loss counter
         self.pause_until: float = 0.0         # epoch time to resume after pause
         self.flash_pause_until: float = 0.0   # epoch time to resume after flash crash
+        self.panic_pause_until: float = 0.0   # epoch time to resume after panic market
         self.stopped: bool = False            # hard stop (max drawdown)
         self._last_day: str = ""              # track UTC day for resets
         self._bear_notified: bool = False     # avoid spamming bear market alert
+        self._load_daily_state()
+
+    # ── Persistence ───────────────────────────────────────────────────────────
+
+    def _load_daily_state(self) -> None:
+        """Restore today's daily_pnl from disk so restarts don't leak the cap."""
+        if not _STATE_FILE.exists():
+            return
+        try:
+            data = json.loads(_STATE_FILE.read_text())
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            if data.get("date") == today:
+                self.daily_pnl = float(data.get("daily_pnl", 0.0))
+                self.consec_losses = int(data.get("consec_losses", 0))
+                self._last_day = today
+                logger.info(
+                    f"Recovered daily state for {today}: "
+                    f"P&L=${self.daily_pnl:.2f}, consec_losses={self.consec_losses}"
+                )
+        except Exception as e:
+            logger.warning(f"Could not load daily state: {e}")
+
+    def _save_daily_state(self) -> None:
+        try:
+            _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            _STATE_FILE.write_text(json.dumps({
+                "date": today,
+                "daily_pnl": self.daily_pnl,
+                "consec_losses": self.consec_losses,
+            }))
+        except Exception as e:
+            logger.warning(f"Could not save daily state: {e}")
 
     # ── Daily reset ───────────────────────────────────────────────────────────
 
@@ -28,6 +68,7 @@ class RiskManager:
             logger.info(f"New UTC day: {today}. Resetting daily P&L.")
             self.daily_pnl = 0.0
             self._last_day = today
+            self._save_daily_state()
 
     # ── Record trade outcome ──────────────────────────────────────────────────
 
@@ -46,6 +87,8 @@ class RiskManager:
             notifier.notify_consecutive_loss_pause(CONSEC_LOSS_PAUSE_H)
             self.consec_losses = 0
 
+        self._save_daily_state()
+
     def update_peak(self, balance_usd: float) -> None:
         if balance_usd > self.peak_balance:
             self.peak_balance = balance_usd
@@ -63,6 +106,28 @@ class RiskManager:
         if self.flash_pause_until and time.time() < self.flash_pause_until:
             remaining = (self.flash_pause_until - time.time()) / 3600
             logger.info(f"Flash crash pause. Resumes in {remaining:.1f}h.")
+            return True
+        return False
+
+    def is_panic_paused(self) -> bool:
+        if self.panic_pause_until and time.time() < self.panic_pause_until:
+            remaining = (self.panic_pause_until - time.time()) / 3600
+            logger.info(f"Panic market pause. Resumes in {remaining:.1f}h.")
+            return True
+        return False
+
+    def check_panic_market(self, market_data: dict) -> bool:
+        """Detect market panic: large price drop + strong EMA divergence.
+        Both conditions must be true to avoid false positives on single-candle spikes."""
+        roc = market_data.get("roc_40h", 0.0)
+        ema_gap = market_data.get("ema_gap_pct", 0.0)
+        if roc <= PANIC_ROC_THRESHOLD and ema_gap <= PANIC_EMA_GAP_PCT:
+            logger.warning(
+                f"Panic market detected! ROC(40h)={roc*100:.1f}% "
+                f"EMA_gap={ema_gap*100:.1f}%. Pausing {PANIC_PAUSE_H}h."
+            )
+            self.panic_pause_until = time.time() + PANIC_PAUSE_H * 3600
+            notifier.notify_panic_pause(roc, ema_gap, PANIC_PAUSE_H)
             return True
         return False
 
@@ -132,10 +197,16 @@ class RiskManager:
         if self.is_flash_paused():
             return False
 
+        if self.is_panic_paused():
+            return False
+
         if self.check_max_drawdown(balance_usd):
             return False
 
         if self.check_flash_crash(market_data.get("change_1h", 0)):
+            return False
+
+        if self.check_panic_market(market_data):
             return False
 
         if self.check_daily_limits(balance_usd):
