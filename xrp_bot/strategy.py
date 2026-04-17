@@ -208,10 +208,13 @@ def monitor_position(risk_manager) -> str | None:
             from paper_wallet import update as pw_update
             pw_update(net)
         logger.info(f"SL hit @ ${sl_price:.4f} | loss=${net:.4f}")
-        # Activate cooldown so we skip the next downtrend signal (avoid knife-catching chain)
+        # Activate cooldown to skip the next signal in the same direction
         if _pos.strategy_mode == "DOWNTREND":
             from analysis import set_downtrend_cooldown
             set_downtrend_cooldown(True)
+        elif _pos.strategy_mode == "UPTREND":
+            from analysis import set_uptrend_cooldown
+            set_uptrend_cooldown(True)
         _pos = Position()
         return "SL"
 

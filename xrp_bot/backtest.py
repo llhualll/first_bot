@@ -159,7 +159,7 @@ def run_backtest(df, test_days: int) -> list:
     balance      = INITIAL_BALANCE
     trades       = []
     skip_until   = None
-    dn_cooldown  = False   # mirrors analysis.py _dn_cooldown
+    dn_cooldown  = False   # downtrend only; uptrend cooldown removed after testing
 
     for ts, row in test_df.iterrows():
         if pd.isna(row["ema_fast"]) or pd.isna(row["ema_slow"]) or pd.isna(row["rsi"]):
@@ -175,7 +175,7 @@ def run_backtest(df, test_days: int) -> list:
 
         signal = None
         if uptrend:
-            dn_cooldown = False   # reset cooldown when trend flips back up
+            dn_cooldown = False   # reset when trend flips back up
             near = abs(price - ema50) / ema50 <= UP_SUPPORT_TOLERANCE
             if near and rsi < UP_RSI_ENTRY:
                 signal = dict(mode="UPTREND",
@@ -183,7 +183,7 @@ def run_backtest(df, test_days: int) -> list:
                               sl_pct=UP_SL_PCT, trade_ratio=UP_TRADE_RATIO)
         else:
             if dn_cooldown:
-                dn_cooldown = False   # consume cooldown, skip this signal
+                dn_cooldown = False   # consume, skip this signal
                 continue
             if rsi < DN_RSI_ENTRY:
                 signal = dict(mode="DOWNTREND",

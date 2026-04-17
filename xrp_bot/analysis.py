@@ -76,6 +76,8 @@ def is_flash_crash(data: dict, threshold: float) -> bool:
 # ── Downtrend cooldown state ──────────────────────────────────────────────────
 # Set to True by strategy.py after a downtrend SL hit.
 # Skips the very next downtrend signal to avoid chasing a falling knife.
+# NOTE: uptrend cooldown was tested and reverted — V-shaped recoveries in
+# uptrends mean the signal right after a SL is often a winning entry.
 _dn_cooldown: bool = False
 
 
@@ -84,6 +86,12 @@ def set_downtrend_cooldown(value: bool) -> None:
     _dn_cooldown = value
     if value:
         logger.info("[DOWNTREND] Cooldown active — skipping next downtrend signal after SL.")
+
+
+def set_uptrend_cooldown(value: bool) -> None:
+    """No-op: uptrend cooldown was removed after backtesting showed it
+    skips winning V-shaped recovery entries."""
+    pass
 
 
 def has_entry_signal(data: dict) -> dict | None:
@@ -106,6 +114,8 @@ def has_entry_signal(data: dict) -> dict | None:
     uptrend = is_uptrend(data)
 
     if uptrend:
+        _dn_cooldown = False   # reset downtrend cooldown when trend flips back up
+
         near = abs(price - support) / support <= UP_SUPPORT_TOLERANCE if support else False
         signal = near and rsi < UP_RSI_ENTRY
         logger.info(
