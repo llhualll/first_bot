@@ -22,6 +22,13 @@ MAKER_FEE            = 0.0016
 BREAKEVEN_BUFFER     = 0.0003
 MAX_CONSEC_LOSS      = 2
 CONSEC_LOSS_PAUSE_H  = 24
+PANIC_ROC_CANDLES    = 10
+PANIC_ROC_THRESHOLD  = -0.08
+PANIC_EMA_GAP_PCT    = -0.03
+PANIC_PAUSE_H        = 48
+DN_MAX_EMA_GAP       = -0.03   # skip downtrend entry when EMA20 >3% below EMA50
+UP_MIN_CROSS_CANDLES = 3       # require EMA20 above EMA50 for ≥3 candles before uptrend entry
+UP_MACRO_SMA_LENGTH  = 150     # UPTREND only when close > SMA150 (macro regime filter)
 
 UP_RSI_ENTRY         = 65
 UP_SUPPORT_TOLERANCE = 0.05
@@ -164,6 +171,7 @@ def run_backtest(df, test_days: int) -> list:
     dn_cooldown  = False   # downtrend only; uptrend cooldown removed after testing
     consec_losses = 0
     pause_until  = None    # consecutive loss pause (24h after 2 SL)
+    panic_until  = None    # panic market pause (48h)
 
     for ts, row in test_df.iterrows():
         if pd.isna(row["ema_fast"]) or pd.isna(row["ema_slow"]) or pd.isna(row["rsi"]):
@@ -171,6 +179,15 @@ def run_backtest(df, test_days: int) -> list:
         if skip_until is not None and ts <= skip_until:
             continue
         if pause_until is not None and ts <= pause_until:
+            continue
+        if panic_until is not None and ts <= panic_until:
+            continue
+
+        # Panic market check: large drop + strong EMA divergence
+        roc = row["roc"] if not pd.isna(row.get("roc", float("nan"))) else 0.0
+        ema_gap = row["ema_gap_pct"] if not pd.isna(row.get("ema_gap_pct", float("nan"))) else 0.0
+        if roc <= PANIC_ROC_THRESHOLD and ema_gap <= PANIC_EMA_GAP_PCT:
+            panic_until = ts + pd.Timedelta(hours=PANIC_PAUSE_H)
             continue
 
         price   = row["close"]
@@ -183,7 +200,10 @@ def run_backtest(df, test_days: int) -> list:
         if uptrend:
             dn_cooldown = False   # reset when trend flips back up
             near = abs(price - ema50) / ema50 <= UP_SUPPORT_TOLERANCE
-            if near and rsi < UP_RSI_ENTRY:
+            confirmed = row.get("since_cross", UP_MIN_CROSS_CANDLES) >= UP_MIN_CROSS_CANDLES
+            sma_macro = row.get("sma_macro")
+            macro_bull = pd.notna(sma_macro) and price > sma_macro
+            if near and rsi < UP_RSI_ENTRY and confirmed and macro_bull:
                 signal = dict(mode="UPTREND",
                               tp1_pct=UP_TP1_PCT, tp2_pct=UP_TP2_PCT,
                               sl_pct=UP_SL_PCT, trade_ratio=UP_TRADE_RATIO)
@@ -191,7 +211,8 @@ def run_backtest(df, test_days: int) -> list:
             if dn_cooldown:
                 dn_cooldown = False   # consume, skip this signal
                 continue
-            if rsi < DN_RSI_ENTRY:
+            ema_gap = ema20 / ema50 - 1  # negative when EMA20 < EMA50
+            if rsi < DN_RSI_ENTRY and ema_gap >= DN_MAX_EMA_GAP:
                 signal = dict(mode="DOWNTREND",
                               tp1_pct=DN_TP1_PCT, tp2_pct=DN_TP2_PCT,
                               sl_pct=DN_SL_PCT, trade_ratio=DN_TRADE_RATIO)
@@ -321,9 +342,21 @@ def run():
     print(f"Fetching XRP/USD 4H candles from Kraken ({warmup_days} days for warmup)...")
     df = fetch_ohlcv("4h", days=warmup_days)
 
-    df["ema_fast"] = ta.ema(df["close"], length=EMA_FAST)
-    df["ema_slow"] = ta.ema(df["close"], length=EMA_SLOW)
-    df["rsi"]      = ta.rsi(df["close"], length=RSI_PERIOD)
+    df["ema_fast"]    = ta.ema(df["close"], length=EMA_FAST)
+    df["ema_slow"]    = ta.ema(df["close"], length=EMA_SLOW)
+    df["rsi"]         = ta.rsi(df["close"], length=RSI_PERIOD)
+    df["roc"]         = df["close"].pct_change(periods=PANIC_ROC_CANDLES)
+    df["ema_gap_pct"] = (df["ema_fast"] - df["ema_slow"]) / df["ema_slow"]
+    df["sma_macro"]   = df["close"].rolling(UP_MACRO_SMA_LENGTH).mean()
+
+    # Consecutive candles where EMA20 > EMA50 (uptrend confirmation)
+    uptrend_mask = df["ema_fast"] > df["ema_slow"]
+    since_cross = []
+    count = 0
+    for up in uptrend_mask:
+        count = count + 1 if up else 0
+        since_cross.append(count)
+    df["since_cross"] = since_cross
 
     cutoff  = datetime.now(timezone.utc) - timedelta(days=test_days)
     test_df = df[df.index >= cutoff]

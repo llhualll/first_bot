@@ -34,6 +34,10 @@ UP_TP1_PCT           = 0.015   # +1.5% (give more room, trend helps)
 UP_TP2_PCT           = 0.025   # +2.5%
 UP_SL_PCT            = 0.010   # -1.0%
 UP_TRADE_RATIO       = 0.80    # full size
+UP_MIN_CROSS_CANDLES = 3       # EMA20 must be above EMA50 for ≥3 candles (12h) before entry
+                               # filters false crossovers that reverse quickly
+UP_MACRO_SMA_LENGTH  = 150     # macro regime filter: close > SMA150(4H) ≈ 25-day avg
+                               # blocks uptrend entries during macro downtrends (bull traps)
 
 # Downtrend strategy (EMA20 < EMA50): buy deep oversold bounces only
 DN_RSI_ENTRY         = 32      # tightened from 35 — reduces false signals in sustained downtrends
@@ -41,6 +45,7 @@ DN_TP1_PCT           = 0.008   # +0.8% (quick exit, hostile environment)
 DN_TP2_PCT           = 0.013   # +1.3%
 DN_SL_PCT            = 0.006   # -0.6% (tight stop)
 DN_TRADE_RATIO       = 0.40    # half size — downtrend is risky
+DN_MAX_EMA_GAP       = -0.03   # skip entry if EMA20 is >3% below EMA50 (freefall zone)
 
 # ── Risk controls ──────────────────────────────────────────
 MAX_DAILY_LOSS   = 0.02    # stop trading if daily loss >= 2%
@@ -63,6 +68,14 @@ EMA_FAST         = 20
 EMA_SLOW         = 50
 SUPPORT_LOOKBACK = 20      # candles to look back for support level
 SUPPORT_TOLERANCE= 0.012   # price must be within 1.2% of support (0.5% was too tight)
+
+# ── Panic market detection ─────────────────────────────────
+# Triggers when price drops sharply AND trend is strongly down.
+# Both conditions must be true simultaneously to avoid false positives.
+PANIC_ROC_CANDLES   = 10     # look-back: 10 × 4H = 40 hours
+PANIC_ROC_THRESHOLD = -0.08  # price dropped > 8% in 40h
+PANIC_EMA_GAP_PCT   = -0.03  # EMA20 is > 3% below EMA50
+PANIC_PAUSE_H       = 48     # hours to suspend all new entries
 
 # ── Scheduling ─────────────────────────────────────────────
 DAY_RESET_UTC_HOUR = 0     # reset daily P&L at UTC 00:00
