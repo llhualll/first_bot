@@ -23,6 +23,7 @@ class Position:
 
     buy_order_id: str = ""
     buy_placed_at: float = 0.0    # epoch time
+    buy_filled: bool = False
 
     tp1_order_id: str = ""
     tp2_order_id: str = ""
@@ -114,21 +115,22 @@ def check_buy_timeout() -> bool:
     if not _pos.is_open:
         return False
 
+    # If already filled, nothing to time out.
+    if _check_buy_filled(_pos):
+        return False
+
     elapsed_h = (time.time() - _pos.buy_placed_at) / 3600
     if elapsed_h < ORDER_TIMEOUT_H:
         return False
 
-    status = get_order_status(_pos.buy_order_id)
-    if status == "open":
-        cancel_order(_pos.buy_order_id)
-        cancel_order(_pos.tp1_order_id)
-        cancel_order(_pos.tp2_order_id)
-        cancel_order(_pos.sl_order_id)
-        notifier.notify_order_cancelled(f"Unfilled after {ORDER_TIMEOUT_H}h. Conditions may have changed.")
-        _pos = Position()
-        logger.info("Buy order timed out and cancelled.")
-        return True
-    return False
+    cancel_order(_pos.buy_order_id)
+    cancel_order(_pos.tp1_order_id)
+    cancel_order(_pos.tp2_order_id)
+    cancel_order(_pos.sl_order_id)
+    notifier.notify_order_cancelled(f"Unfilled after {ORDER_TIMEOUT_H}h. Conditions may have changed.")
+    _pos = Position()
+    logger.info("Buy order timed out and cancelled.")
+    return True
 
 
 def _calc_net_profit(entry: float, exit_price: float, xrp_qty: float) -> tuple[float, float]:
@@ -145,6 +147,10 @@ def monitor_position(risk_manager) -> str | None:
     """
     global _pos
     if not _pos.is_open:
+        return None
+
+    # Don't monitor TP/SL until the buy has actually filled.
+    if not _check_buy_filled(_pos):
         return None
 
     current_price = 0.0
@@ -256,6 +262,8 @@ def recover_existing_position() -> bool:
     global _pos
     _pos.is_open = True
     _pos.buy_placed_at = time.time()
+    # If no open buy order remains, it already filled before restart.
+    _pos.buy_filled = (len(buy_orders) == 0)
     for o in buy_orders:
         _pos.buy_order_id = o["id"]
         _pos.entry_price = o.get("price", 0.0)
@@ -279,6 +287,36 @@ def _current_price() -> float:
     """Fetch real XRP ticker price. Returns 0.0 on failure."""
     t = fetch_ticker()
     return float(t.get("last", 0.0) or 0.0)
+
+
+def _should_simulate_buy_fill(pos: Position) -> bool:
+    """Paper: limit buy fills when real price touches/crosses the limit.
+    Small tolerance (0.2%) accounts for bid-ask spread — a market-price limit buy
+    in live would almost always fill within seconds via cross."""
+    if not PAPER_TRADE:
+        return False
+    price = _current_price()
+    if price <= 0:
+        return False
+    return price <= pos.entry_price * 1.002
+
+
+def _check_buy_filled(pos: Position) -> bool:
+    """Unified check for paper + live. Updates pos.buy_filled on transition."""
+    if pos.buy_filled:
+        return True
+    if PAPER_TRADE:
+        if _should_simulate_buy_fill(pos):
+            pos.buy_filled = True
+            logger.info(f"[PAPER] Buy filled @ limit ${pos.entry_price:.4f}")
+            return True
+        return False
+    # Live mode
+    if get_order_status(pos.buy_order_id) == "closed":
+        pos.buy_filled = True
+        logger.info(f"Buy order filled @ ${pos.entry_price:.4f}")
+        return True
+    return False
 
 
 def _should_simulate_tp(pos: Position, level: str) -> bool:
