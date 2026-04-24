@@ -28,7 +28,9 @@ BREAKEVEN_BUFFER = 0.0003  # cover fees when moving SL to breakeven after TP1
 
 # ── Dual Strategy ──────────────────────────────────────────
 # Uptrend strategy (EMA20 > EMA50): buy pullbacks in a rising trend
-UP_RSI_ENTRY         = 65      # enter when RSI pulls back below 65
+UP_RSI_ENTRY         = 50      # lowered from 65 after 7d chop bled −$77 in paper
+                               # 28d backtest: 65→+$55, 50→+$30, 45→+$34
+                               # 50 sacrifices ~$25 trend upside for chop protection
 UP_SUPPORT_TOLERANCE = 0.05    # price within 5% of EMA50
 UP_TP1_PCT           = 0.015   # +1.5% (give more room, trend helps)
 UP_TP2_PCT           = 0.025   # +2.5%
